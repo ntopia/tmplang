@@ -1,1 +1,4 @@
 /src/Tmplang*
+/src/main
+*.depend
+*.o
