@@ -1,24 +1,24 @@
 #include <iostream>
 
 #include "antlr4-runtime.h"
-#include "tmplangLexer.h"
-#include "tmplangParser.h"
-#include "tmplangBaseListener.h"
+#include "TmplangLexer.h"
+#include "TmplangParser.h"
+#include "TmplangBaseListener.h"
 
 using namespace antlr4;
 
-class TreeListener : public tmplangBaseListener {
+class TreeListener : public TmplangBaseListener {
 public:
-  void enterFile(tmplangParser::FileContext *ctx) override {
+  void enterFile(TmplangParser::FileContext *ctx) override {
     std::cout << "file\n";
   }
 };
 
 int main(int argc, const char *argv[]) {
   ANTLRInputStream input(std::cin);
-  tmplangLexer lexer(&input);
+  TmplangLexer lexer(&input);
   CommonTokenStream tokens(&lexer);
-  tmplangParser parser(&tokens);
+  TmplangParser parser(&tokens);
 
   tree::ParseTree *tree = parser.file();
   TreeListener listener;
