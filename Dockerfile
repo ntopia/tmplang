@@ -9,6 +9,7 @@ RUN curl -O https://www.antlr.org/download/antlr-4.9.2-complete.jar
 ENV CLASSPATH="/usr/local/lib/antlr-4.9.2-complete.jar"
 RUN echo 'alias antlr4="java -jar /usr/local/lib/antlr-4.9.2-complete.jar"' >> ~/.bashrc
 RUN echo 'alias grun="java org.antlr.v4.gui.TestRig"' >> ~/.bashrc
+ENV LD_LIBRARY_PATH="/usr/local/lib:${LD_LIBRARY_PATH}"
 
 WORKDIR /tmp/antlr4
 
