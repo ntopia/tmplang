@@ -32,7 +32,10 @@ expr
     | '(' expr ')'          # ParenExpr
     ;
 
-literal: IntegerLiteral ;
+literal
+    : IntegerLiteral
+    | CharacterLiteral
+    ;
 
 exprList: expr (',' expr)* ;
 
@@ -44,6 +47,9 @@ IntegerLiteral
 
 DecimalLiteral: NONZERODIGIT (DIGIT)* ;
 HexadecimalLiteral: '0x' (HEXADECIMALDIGIT)+ ;
+
+CharacterLiteral
+    : '\'' [^'\\\r\n] '\'' ;
 
 
 ID: LETTER (LETTER | DIGIT)* ;
