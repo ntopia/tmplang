@@ -1,4 +1,4 @@
-FROM adoptopenjdk/openjdk11:x86_64-debian-jdk-11.0.12_7
+FROM docker.io/adoptopenjdk/openjdk11:x86_64-debian-jdk-11.0.12_7
 
 RUN apt update && apt -y install unzip gcc g++ pkg-config uuid-dev git cmake vim
 
