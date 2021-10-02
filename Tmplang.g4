@@ -11,7 +11,7 @@ functionParamDecl: type ID ;
 
 block: '{' (statement)* '}' ;
 
-type: 'int' | 'float' | 'char' ;
+type: 'int' | 'float' | 'char' | 'bool';
 
 statement
     : block                           # BlockStatement
@@ -21,7 +21,7 @@ statement
     ;
 
 expr
-    : ID '(' exprList ')'   # FunctionCallExpr
+    : expr '(' exprList ')'   # FunctionCallExpr
     | '-' expr              # NegateExpr
     | '!' expr              # NotExpr
     | expr ('*'|'/') expr   # MulDivExpr
