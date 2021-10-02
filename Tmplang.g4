@@ -28,19 +28,34 @@ expr
     | expr ('+'|'-') expr   # PlusMinusExpr
     | expr '==' expr        # EqualExpr
     | ID                    # VarRefExpr
+    | literal               # LiteralExpr
     | '(' expr ')'          # ParenExpr
     ;
+
+literal: IntegerLiteral ;
 
 exprList: expr (',' expr)* ;
 
 
+IntegerLiteral
+    : DecimalLiteral
+    | HexadecimalLiteral
+    ;
+
+DecimalLiteral: NONZERODIGIT (DIGIT)* ;
+HexadecimalLiteral: '0x' (HEXADECIMALDIGIT)+ ;
 
 
 ID: LETTER (LETTER | DIGIT)* ;
 
 fragment
-LETTER: [a-zA-Z] ;
-DIGIT: [0-9];
+LETTER: [a-zA-Z_] ;
+fragment
+DIGIT: [0-9] ;
+fragment
+NONZERODIGIT: [1-9] ;
+fragment
+HEXADECIMALDIGIT: [0-9a-fA-F] ;
 
 WS: [ \t\n\r]+ -> skip ;
 

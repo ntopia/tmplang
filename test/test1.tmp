@@ -1,7 +1,8 @@
 
 fn add(int a, int b) {
-    let c = a + b * a;
+    let c = a + b * a - 10;
+    let d = 34531 - 23;
 
-    return c / a - b * c;
+    return c / a - 14 * d;
 }
 

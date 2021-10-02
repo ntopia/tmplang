@@ -9,8 +9,11 @@ using namespace antlr4;
 
 class TreeListener : public TmplangBaseListener {
 public:
-  void enterFile(TmplangParser::FileContext *ctx) override {
-    std::cout << "file\n";
+  void exitFile(TmplangParser::FileContext *ctx) override {
+    std::cout << "parsed function list\n";
+    for (auto *fn : ctx->function()) {
+      std::cout << fn->ID()->toString() << std::endl;
+    }
   }
 };
 
