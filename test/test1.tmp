@@ -8,7 +8,7 @@ fn some_function2(int param1, int param2) {
         let d = -(param2 - param1);
         let e = !(var1 == d);
     }
-    return e;
+    return var2;
 }
 
 fn some_function1(int a, int b): int {

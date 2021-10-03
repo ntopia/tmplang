@@ -50,15 +50,15 @@ normalStatement
     ;
 
 expr
-    : expr '(' exprList ')'   # FunctionCallExpr
-    | '-' expr              # NegateExpr
-    | '!' expr              # NotExpr
-    | expr ('*'|'/') expr   # MulDivExpr
-    | expr ('+'|'-') expr   # PlusMinusExpr
-    | expr '==' expr        # EqualExpr
-    | identifier            # VarRefExpr
-    | literal               # LiteralExpr
-    | '(' expr ')'          # ParenExpr
+    : expr '(' exprList? ')' # FunctionCallExpr
+    | '-' expr               # NegateExpr
+    | '!' expr               # NotExpr
+    | expr ('*'|'/') expr    # MulDivExpr
+    | expr ('+'|'-') expr    # PlusMinusExpr
+    | expr '==' expr         # EqualExpr
+    | identifier             # VarRefExpr
+    | literal                # LiteralExpr
+    | '(' expr ')'           # ParenExpr
     ;
 
 literal
