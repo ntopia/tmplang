@@ -3,21 +3,43 @@ grammar Tmplang;
 
 file: (function)+ ;
 
-function: 'fn' ID '(' functionParams? ')' block ;
+function: 'fn' ID '(' functionParams? ')' blockStatement ;
 
 functionParams: functionParamDecl (',' functionParamDecl)* ;
 
 functionParamDecl: type ID ;
 
-block: '{' (statement)* '}' ;
-
 type: 'int' | 'float' | 'char' | 'bool';
 
 statement
-    : block                           # BlockStatement
-    | 'let' type? ID ('=' expr)? ';'  # VarDeclStatement
-    | 'return' expr? ';'              # ReturnStatement
-    | expr ';'                        # NormalStatement
+    : ifStatement
+    | blockStatement
+    | varDeclStatement
+    | returnStatement
+    | normalStatement
+    ;
+
+blockStatement
+    : '{' (statement)* '}'
+    ;
+
+ifStatement
+    : 'if' '(' expr ')' blockStatement
+      (
+        'else' (blockStatement | ifStatement)
+      )?
+    ;
+
+varDeclStatement
+    : 'let' type? ID ('=' expr)? ';'
+    ;
+
+returnStatement
+    : 'return' expr? ';'
+    ;
+
+normalStatement
+    : expr ';'
     ;
 
 expr
