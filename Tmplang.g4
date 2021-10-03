@@ -3,11 +3,13 @@ grammar Tmplang;
 
 file: (function)+ ;
 
-function: 'fn' ID '(' functionParams? ')' blockStatement ;
+function: 'fn' identifier '(' functionParams? ')' functionReturnTypeDecl? blockStatement ;
 
 functionParams: functionParamDecl (',' functionParamDecl)* ;
 
-functionParamDecl: type ID ;
+functionParamDecl: type identifier ;
+
+functionReturnTypeDecl: ':' type ;
 
 type: 'int' | 'float' | 'char' | 'bool';
 
@@ -31,7 +33,7 @@ ifStatement
     ;
 
 varDeclStatement
-    : 'let' type? ID ('=' expr)? ';'
+    : 'let' type? identifier ('=' expr)? ';'
     ;
 
 returnStatement
@@ -49,7 +51,7 @@ expr
     | expr ('*'|'/') expr   # MulDivExpr
     | expr ('+'|'-') expr   # PlusMinusExpr
     | expr '==' expr        # EqualExpr
-    | ID                    # VarRefExpr
+    | identifier            # VarRefExpr
     | literal               # LiteralExpr
     | '(' expr ')'          # ParenExpr
     ;
@@ -57,9 +59,12 @@ expr
 literal
     : IntegerLiteral
     | CharacterLiteral
+    | BoolLiteral
     ;
 
 exprList: expr (',' expr)* ;
+
+identifier: ID ;
 
 
 IntegerLiteral
@@ -72,6 +77,8 @@ HexadecimalLiteral: '0x' (HEXADECIMALDIGIT)+ ;
 
 CharacterLiteral
     : '\'' [^'\\\r\n] '\'' ;
+
+BoolLiteral: ('true' | 'false');
 
 
 ID: LETTER (LETTER | DIGIT)* ;

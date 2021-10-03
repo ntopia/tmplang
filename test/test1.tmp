@@ -1,8 +1,31 @@
 
-fn add(int a, int b) {
+fn some_function2(int param1, int param2) {
+    let var1 = param1 + 10;
+    let int var2 = param2 * 444;
+
+    if (var2 == 444) {
+        let c = false;
+        let d = -(param2 - param1);
+        let e = !(var1 == d);
+    }
+    return e;
+}
+
+fn some_function1(int a, int b): int {
     let c = a + b * a - 10;
     let d = 34531 - 23;
 
-    return c / a - 14 * d;
+    if (c == 37) {
+        let a = true;
+        let bb = (c == a);
+    }
+
+    let super = some_function2(c, d);
+
+    return super / a - 14 * super;
 }
 
+fn other_function(int param) {
+    let c = param + 777;
+    return c - 10;
+}

@@ -1,5 +1,8 @@
 #include <iostream>
+#include <string>
 #include <vector>
+#include <utility>
+#include <unordered_map>
 
 #include "antlr4-runtime.h"
 #include "TmplangLexer.h"
@@ -8,126 +11,83 @@
 
 using namespace antlr4;
 
-int typecounter = 0;
-enum TypeKind {
-  INT,
-  CHAR,
-  BOOL,
-  FUNC,
-  TYPE_VAR,
-};
+
 struct Type {
-  TypeKind type;
+};
+struct TypeVar : public Type {
   int id;
-  std::vector<Type> from, to;
+};
+struct ConcreteType : public Type {
+  std::string name;
+};
+struct FunctionType : public Type {
+  std::vector<std::shared_ptr<Type>> from;
+  std::shared_ptr<Type> to;
 };
 
-struct TypeEquation {
-  Type left, right;
+struct Scope {
+  std::unordered_map<std::string, std::shared_ptr<Type>> symbols;
+  Scope* parent;
 };
 
-class AssignTypenameListener : public TmplangBaseListener {
- private:
-  tree::ParseTreeProperty<Type> props;
-
+class SymbolTableGenerator : public TmplangBaseListener {
  public:
-  std::vector<TypeEquation> equations;
+  tree::ParseTreeProperty<std::shared_ptr<Scope>> scopes;
+  Scope *currentScope;
 
-  void exitFile(TmplangParser::FileContext *ctx) override {
-    std::cout << "parsed function list\n";
-    for (auto *fn : ctx->function()) {
-      std::cout << fn->ID()->toString() << std::endl;
+  void enterFile(TmplangParser::FileContext *ctx) override {
+    scopes.put(ctx, std::make_shared<Scope>());
+    currentScope = scopes.get(ctx).get();
+  }
+
+  void enterFunctionParamDecl(TmplangParser::FunctionParamDeclContext *ctx) override {
+    ConcreteType concreteType;
+    concreteType.name = ctx->type()->getText();
+
+    auto insertRet = currentScope->symbols.emplace(ctx->identifier()->getText(), std::make_shared<ConcreteType>(concreteType));
+    if (!insertRet.second) {
+      std::cout << "param decl collision!!!\n";
     }
   }
 
-  void enterFunctionCallExpr(TmplangParser::FunctionCallExprContext *ctx) override {
-    props.put(ctx, Type{ TYPE_VAR, typecounter++ });
+  void exitFunctionParamDecl(TmplangParser::FunctionParamDeclContext *ctx) override {
+    // type equation to each param
   }
 
-  void exitFunctionCallExpr(TmplangParser::FunctionCallExprContext *ctx) override {
-    std::vector<Type> childTypes;
-    for (auto* expr : ctx->exprList()->expr()) {
-      childTypes.push_back(props.get(expr));
+  void enterFunction(TmplangParser::FunctionContext *ctx) override {
+    scopes.put(ctx, std::make_shared<Scope>());
+    scopes.get(ctx)->parent = currentScope;
+
+    // move downward
+    currentScope = scopes.get(ctx).get();
+  }
+
+  void exitFunction(TmplangParser::FunctionContext *ctx) override {
+    FunctionType functionType;
+
+    auto name = ctx->identifier()->ID()->getText();
+
+    if (ctx->functionParams() != nullptr) {
+      for (auto *decl : ctx->functionParams()->functionParamDecl()) {
+        auto paramIt = currentScope->symbols.find(decl->identifier()->getText());
+        functionType.from.push_back(paramIt->second);
+      }
     }
-    equations.push_back(TypeEquation{ props.get(ctx->expr()), Type{ FUNC, typecounter++, childTypes, std::vector<Type>{ props.get(ctx) } }});
-  }
 
-  void enterNegateExpr(TmplangParser::NegateExprContext *ctx) override {
-    props.put(ctx, Type{ TYPE_VAR, typecounter++ });
-  }
-
-  void exitNegateExpr(TmplangParser::NegateExprContext *ctx) override {
-    equations.push_back(TypeEquation{ props.get(ctx), props.get(ctx->expr()) });
-  }
-
-  void enterNotExpr(TmplangParser::NotExprContext *ctx) override {
-    props.put(ctx, Type{ TYPE_VAR, typecounter++ });
-  }
-
-  void exitNotExpr(TmplangParser::NotExprContext *ctx) override {
-    equations.push_back(TypeEquation{ props.get(ctx->expr()), Type{ BOOL, typecounter++ } });
-    equations.push_back(TypeEquation{ props.get(ctx), Type{ BOOL, typecounter++ } });
-  }
-
-  void enterMulDivExpr(TmplangParser::MulDivExprContext *ctx) override {
-    props.put(ctx, Type{ TYPE_VAR, typecounter++ });
-  }
-
-  void exitMulDivExpr(TmplangParser::MulDivExprContext *ctx) override {
-    equations.push_back(TypeEquation{ props.get(ctx->expr()[0]), props.get(ctx->expr()[1]) });
-    equations.push_back(TypeEquation{ props.get(ctx), props.get(ctx->expr()[0]) });
-    equations.push_back(TypeEquation{ props.get(ctx), props.get(ctx->expr()[1]) });
-  }
-
-  void enterPlusMinusExpr(TmplangParser::PlusMinusExprContext *ctx) override {
-    props.put(ctx, Type{ TYPE_VAR, typecounter++ });
-  }
-
-  void exitPlusMinusExpr(TmplangParser::PlusMinusExprContext *ctx) override {
-    equations.push_back(TypeEquation{ props.get(ctx->expr()[0]), props.get(ctx->expr()[1]) });
-    equations.push_back(TypeEquation{ props.get(ctx), props.get(ctx->expr()[0]) });
-    equations.push_back(TypeEquation{ props.get(ctx), props.get(ctx->expr()[1]) });
-  }
-
-  void enterEqualExpr(TmplangParser::EqualExprContext *ctx) override {
-    props.put(ctx, Type{ TYPE_VAR, typecounter++ });
-  }
-
-  void exitEqualExpr(TmplangParser::EqualExprContext *ctx) override {
-    // no implicit conversion while equality checking
-    equations.push_back(TypeEquation{ props.get(ctx->expr()[0]), props.get(ctx->expr()[1]) });
-    equations.push_back(TypeEquation{ props.get(ctx), Type{ BOOL, typecounter++ } });
-  }
-
-  void enterVarRefExpr(TmplangParser::VarRefExprContext *ctx) override {
-    props.put(ctx, Type{ TYPE_VAR, typecounter++ });
-  }
-
-  void enterLiteralExpr(TmplangParser::LiteralExprContext *ctx) override {
-    props.put(ctx, Type{ TYPE_VAR, typecounter++ });
-  }
-
-  void exitLiteralExpr(TmplangParser::LiteralExprContext *ctx) override {
-    equations.push_back(TypeEquation{ props.get(ctx), props.get(ctx->literal()) });
-  }
-
-  void enterParenExpr(TmplangParser::ParenExprContext *ctx) override {
-    props.put(ctx, Type{ TYPE_VAR, typecounter++ });
-  }
-
-  void exitParenExpr(TmplangParser::ParenExprContext *ctx) override {
-    equations.push_back(TypeEquation{ props.get(ctx), props.get(ctx->expr()) });
-  }
-
-  void enterLiteral(TmplangParser::LiteralContext *ctx) override {
-    if (ctx->CharacterLiteral() != nullptr) {
-      std::cout << "character literal\n";
-      props.put(ctx, Type{ CHAR, typecounter++ });
+    // move upward
+    currentScope = currentScope->parent;
+    auto insertRet = currentScope->symbols.emplace(ctx->identifier()->getText(), std::make_shared<FunctionType>(functionType));
+    if (!insertRet.second) {
+      std::cout << "function decl collision!!!\n";
     }
-    else if (ctx->IntegerLiteral() != nullptr) {
-      std::cout << "integer literal " << ctx->IntegerLiteral()->toString() << std::endl;
-      props.put(ctx, Type{ INT, typecounter++ });
-    }
+  }
+
+  void enterBlockStatement(TmplangParser::BlockStatementContext *ctx) override {
+    
+  }
+
+  void exitBlockStatement(TmplangParser::BlockStatementContext *ctx) override {
+
   }
 };
 
@@ -138,11 +98,8 @@ int main(int argc, const char *argv[]) {
   TmplangParser parser(&tokens);
 
   tree::ParseTree *tree = parser.file();
-  AssignTypenameListener listener;
+  SymbolTableGenerator listener;
   tree::ParseTreeWalker::DEFAULT.walk(&listener, tree);
 
-  for (auto eq : listener.equations) {
-    std::cout << eq.left.type << " " << eq.left.id << " " << eq.right.type << " " << eq.right.id << "\n";
-  }
   return 0;
 }
