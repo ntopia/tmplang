@@ -19,12 +19,14 @@ enum TypeKind {
   FUNCTION_TYPE,
 };
 struct Type {
+  virtual ~Type() {}
   virtual void print() = 0;
   virtual bool equal(Type *rhs) = 0;
 };
 struct TypeVar : public Type {
   int id;
 
+  ~TypeVar() {}
   virtual void print() {
     std::cout << "Var (id: " << id << ")";
   }
@@ -38,6 +40,7 @@ struct ConcreteType : public Type {
   ConcreteType() {}
   ConcreteType(std::string&& _name): name(_name) {}
 
+  ~ConcreteType() {}
   virtual void print() {
     std::cout << "Concrete " << name;
   }
@@ -47,9 +50,10 @@ struct ConcreteType : public Type {
   }
 };
 struct FunctionType : public Type {
-  std::vector<std::shared_ptr<Type>> from;
-  std::shared_ptr<Type> to;
+  std::vector<Type*> from;
+  Type *to;
 
+  ~FunctionType() {}
   virtual void print() {
     std::cout << "Func (";
     for (auto arg : from) {
@@ -61,18 +65,14 @@ struct FunctionType : public Type {
   }
   virtual bool equal(Type *rhs) {
     auto *t = dynamic_cast<FunctionType*>(rhs);
-    if (t == nullptr || !to->equal(t->to.get())) return false;
+    if (t == nullptr || !to->equal(t->to)) return false;
     if (from.size() != t->from.size()) return false;
     for (int i = 0; i < from.size(); i++) {
-      if (!from[i]->equal(t->from[i].get())) return false;
+      if (!from[i]->equal(t->from[i])) return false;
     }
     return true;
   }
 };
-std::shared_ptr<Type> boolType = std::make_shared<ConcreteType>("bool");
-std::shared_ptr<Type> intType = std::make_shared<ConcreteType>("int");
-std::shared_ptr<Type> charType = std::make_shared<ConcreteType>("char");
-std::vector<std::shared_ptr<Type>> tmpTypes;
 
 
 struct Scope {
@@ -121,23 +121,12 @@ class SymbolTableGenerator : public TmplangBaseListener {
 
     for (auto *decl : ctx->functionParamDecl()) {
       auto paramIt = currentScope->symbols.find(decl->identifier()->getText());
-      functionType->from.push_back(paramIt->second);
+      functionType->from.push_back(paramIt->second.get());
     }
   }
 
   void enterFunction(TmplangParser::FunctionContext *ctx) override {
     FunctionType functionType;
-
-    if (ctx->functionReturnTypeDecl() != nullptr) {
-      ConcreteType concreteType;
-      concreteType.name = ctx->functionReturnTypeDecl()->type()->getText();
-      functionType.to = std::make_shared<ConcreteType>(concreteType);
-    }
-    else {
-      TypeVar typeVar;
-      typeVar.id = typecounter++;
-      functionType.to = std::make_shared<TypeVar>(typeVar);
-    }
 
     auto insertRet = currentScope->symbols.emplace(ctx->identifier()->getText(), std::make_shared<FunctionType>(functionType));
     if (!insertRet.second) {
@@ -213,7 +202,7 @@ class TypeInferencer : public TmplangBaseListener {
   Scope *currentScope;
   Type *currentFunctionType;
 
-  tree::ParseTreeProperty<std::shared_ptr<Type>> nodeTypes;
+  tree::ParseTreeProperty<std::shared_ptr<Type>> nodeTypes, additionalTypes;
   std::vector<TypeEquation> equations;
 
   void enterFile(TmplangParser::FileContext *ctx) override {
@@ -221,6 +210,19 @@ class TypeInferencer : public TmplangBaseListener {
   }
 
   void enterFunction(TmplangParser::FunctionContext *ctx) override {
+    currentFunctionType = currentScope->symbols.find(ctx->identifier()->getText())->second.get();
+    if (ctx->functionReturnTypeDecl() != nullptr) {
+      ConcreteType concreteType;
+      concreteType.name = ctx->functionReturnTypeDecl()->type()->getText();
+      additionalTypes.put(ctx, std::make_shared<ConcreteType>(concreteType));
+    }
+    else {
+      TypeVar typeVar;
+      typeVar.id = typecounter++;
+      additionalTypes.put(ctx, std::make_shared<TypeVar>(typeVar));
+    }
+    dynamic_cast<FunctionType*>(currentFunctionType)->to = additionalTypes.get(ctx).get();
+
     currentScope = scopes.get(ctx).get();
     currentFunctionType = currentScope->parent->symbols.find(ctx->identifier()->getText())->second.get();
   }
@@ -242,13 +244,30 @@ class TypeInferencer : public TmplangBaseListener {
   }
 
   void exitIfStatement(TmplangParser::IfStatementContext *ctx) override {
-    equations.push_back(TypeEquation{ nodeTypes.get(ctx->expr()).get(), boolType.get() });
+    // dirty hack
+    ConcreteType boolType{ "bool" };
+    additionalTypes.put(ctx, std::make_shared<ConcreteType>(boolType));
+
+    equations.push_back(TypeEquation{ nodeTypes.get(ctx->expr()).get(), additionalTypes.get(ctx).get() });
     currentScope = currentScope->parent;
+  }
+
+  void exitVarDeclStatement(TmplangParser::VarDeclStatementContext *ctx) override {
+    if (ctx->expr() == nullptr) {
+      return;
+    }
+
+    Type *identifierType = currentScope->resolve(ctx->identifier()->getText());
+    if (identifierType == nullptr) {
+      std::cout << "can't find identifier definition!!\n";
+    }
+
+    equations.push_back(TypeEquation{ identifierType, nodeTypes.get(ctx->expr()).get() });
   }
 
   void exitReturnStatement(TmplangParser::ReturnStatementContext *ctx) override {
     Type* a = nodeTypes.get(ctx->expr()).get();
-    Type* b = dynamic_cast<FunctionType*>(currentFunctionType)->to.get();
+    Type* b = dynamic_cast<FunctionType*>(currentFunctionType)->to;
     equations.push_back(TypeEquation{ a, b });
   }
 
@@ -268,16 +287,16 @@ class TypeInferencer : public TmplangBaseListener {
   }
 
   void exitFunctionCallExpr(TmplangParser::FunctionCallExprContext *ctx) override {
-    FunctionType functionType;
+    std::shared_ptr<FunctionType> functionType = std::make_shared<FunctionType>();
     if (ctx->exprList() != nullptr) {
       for (auto *arg : ctx->exprList()->expr()) {
-        functionType.from.push_back(nodeTypes.get(arg));
+        functionType->from.push_back(nodeTypes.get(arg).get());
       }
     }
-    functionType.to = nodeTypes.get(ctx);
-    tmpTypes.push_back(std::make_shared<FunctionType>(functionType));
+    functionType->to = nodeTypes.get(ctx).get();
+    additionalTypes.put(ctx, functionType);
 
-    equations.push_back(TypeEquation{ nodeTypes.get(ctx->expr()).get(), tmpTypes.back().get() });
+    equations.push_back(TypeEquation{ nodeTypes.get(ctx->expr()).get(), functionType.get() });
   }
 
   void enterNegateExpr(TmplangParser::NegateExprContext *ctx) override {
@@ -329,8 +348,12 @@ class TypeInferencer : public TmplangBaseListener {
   }
 
   void exitEqualExpr(TmplangParser::EqualExprContext *ctx) override {
+    // dirty hack
+    ConcreteType boolType{ "bool" };
+    additionalTypes.put(ctx, std::make_shared<ConcreteType>(boolType));
+
     equations.push_back(TypeEquation{ nodeTypes.get(ctx->expr()[0]).get(), nodeTypes.get(ctx->expr()[1]).get() });
-    equations.push_back(TypeEquation{ nodeTypes.get(ctx).get(), boolType.get() });
+    equations.push_back(TypeEquation{ nodeTypes.get(ctx).get(), additionalTypes.get(ctx).get() });
   }
 
   void enterVarRefExpr(TmplangParser::VarRefExprContext *ctx) override {
@@ -349,20 +372,20 @@ class TypeInferencer : public TmplangBaseListener {
   }
 
   void enterLiteralExpr(TmplangParser::LiteralExprContext *ctx) override {
-    TypeVar typeVar;
-    typeVar.id = typecounter++;
-    nodeTypes.put(ctx, std::make_shared<TypeVar>(typeVar));
-  }
-
-  void exitLiteralExpr(TmplangParser::LiteralExprContext *ctx) override {
     if (ctx->literal()->IntegerLiteral() != nullptr) {
-      equations.push_back(TypeEquation{ nodeTypes.get(ctx).get(), intType.get() });
+      ConcreteType intType;
+      intType.name = "int";
+      nodeTypes.put(ctx, std::make_shared<ConcreteType>(intType));
     }
     else if (ctx->literal()->BoolLiteral() != nullptr) {
-      equations.push_back(TypeEquation{ nodeTypes.get(ctx).get(), boolType.get() });
+      ConcreteType boolType;
+      boolType.name = "bool";
+      nodeTypes.put(ctx, std::make_shared<ConcreteType>(boolType));
     }
     else if (ctx->literal()->CharacterLiteral() != nullptr) {
-      equations.push_back(TypeEquation{ nodeTypes.get(ctx).get(), charType.get() });
+      ConcreteType charType;
+      charType.name = "char";
+      nodeTypes.put(ctx, std::make_shared<ConcreteType>(charType));
     }
     else {
       std::cout << "unparsable literal!!\n";
@@ -404,9 +427,9 @@ std::optional<std::unordered_map<int, Type*>> unify(Type *x, Type *y, std::optio
     if (funcX->from.size() != funcY->from.size()) {
       return std::nullopt;
     }
-    subst = unify(funcX->to.get(), funcY->to.get(), subst);
+    subst = unify(funcX->to, funcY->to, subst);
     for (int i = 0; i < funcX->from.size(); i++) {
-      subst = unify(funcX->from[i].get(), funcY->from[i].get(), subst);
+      subst = unify(funcX->from[i], funcY->from[i], subst);
     }
     return subst;
   }
@@ -423,11 +446,11 @@ bool occursCheck(TypeVar *typeVar, Type *type, std::unordered_map<int, Type*>& s
   }
   FunctionType *fType = dynamic_cast<FunctionType*>(type);
   if (fType != nullptr) {
-    if (occursCheck(typeVar, fType->to.get(), subst)) {
+    if (occursCheck(typeVar, fType->to, subst)) {
       return true;
     }
-    for (auto arg : fType->from) {
-      if (occursCheck(typeVar, arg.get(), subst)) {
+    for (auto *arg : fType->from) {
+      if (occursCheck(typeVar, arg, subst)) {
         return true;
       }
     }
@@ -461,11 +484,16 @@ std::optional<std::unordered_map<int, Type*>> unifyAllEquations(std::vector<Type
   return subst;
 }
 
+std::vector<std::shared_ptr<Type>> tmpTypes;
+
 Type* applyUnifier(Type *type, std::unordered_map<int, Type*> subst) {
   if (subst.empty()) {
     return type;
   }
-  if (type->equal(boolType.get()) || type->equal(intType.get()) || type->equal(charType.get())) {
+  ConcreteType intType{ "int" };
+  ConcreteType boolType{ "bool" };
+  ConcreteType charType{ "char" };
+  if (type->equal(&intType) || type->equal(&boolType) || type->equal(&charType)) {
     return type;
   }
   auto *typeVar = dynamic_cast<TypeVar*>(type);
@@ -479,13 +507,13 @@ Type* applyUnifier(Type *type, std::unordered_map<int, Type*> subst) {
   }
   auto *fType = dynamic_cast<FunctionType*>(type);
   if (fType != nullptr) {
-    FunctionType newFunctionType;
-    for (auto arg : fType->from) {
-      newFunctionType.from.push_back(std::shared_ptr<Type>(applyUnifier(arg.get(), subst)));
+    std::shared_ptr<FunctionType> newFunctionType = std::make_shared<FunctionType>();
+    for (auto *arg : fType->from) {
+      newFunctionType->from.push_back(applyUnifier(arg, subst));
     }
-    newFunctionType.to = std::shared_ptr<Type>(applyUnifier(fType->to.get(), subst));
-    tmpTypes.push_back(std::make_shared<FunctionType>(newFunctionType));
-    return tmpTypes.back().get();
+    newFunctionType->to = applyUnifier(fType->to, subst);
+    tmpTypes.push_back(newFunctionType);
+    return newFunctionType.get();
   }
   return nullptr;
 }
@@ -493,7 +521,7 @@ Type* applyUnifier(Type *type, std::unordered_map<int, Type*> subst) {
 
 class Checker : public TmplangBaseListener {
  public:
-  Checker(tree::ParseTreeProperty<std::shared_ptr<Scope>>&& _scopes, std::unordered_map<int, Type*> _subst) : scopes(_scopes), subst(_subst) {}
+  Checker(tree::ParseTreeProperty<std::shared_ptr<Scope>> _scopes, std::unordered_map<int, Type*> _subst) : scopes(_scopes), subst(_subst) {}
 
   tree::ParseTreeProperty<std::shared_ptr<Scope>> scopes;
   Scope *currentScope;
@@ -504,6 +532,12 @@ class Checker : public TmplangBaseListener {
   }
 
   void enterFunction(TmplangParser::FunctionContext *ctx) override {
+    Type *varType = currentScope->resolve(ctx->identifier()->getText());
+    Type *inferredType = applyUnifier(varType, subst);
+    std::cout << ctx->identifier()->getText() << ": ";
+    inferredType->print();
+    std::cout << "\n";
+
     currentScope = scopes.get(ctx).get();
   }
 

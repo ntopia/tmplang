@@ -16,7 +16,7 @@ fn some_function1(int a, int b): int {
     let d = 34531 - 23;
 
     if (c == 37) {
-        let x = true;
+        let x = 1123;
         let bb = (c + x);
     }
 
