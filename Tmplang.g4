@@ -18,6 +18,7 @@ statement
     | blockStatement
     | varDeclStatement
     | returnStatement
+    | assignStatement
     | normalStatement
     ;
 
@@ -34,6 +35,10 @@ ifStatement
 
 varDeclStatement
     : 'let' type? identifier ('=' expr)? ';'
+    ;
+
+assignStatement
+    : identifier '=' expr ';'
     ;
 
 returnStatement

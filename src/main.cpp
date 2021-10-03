@@ -12,6 +12,12 @@
 using namespace antlr4;
 
 
+int typecounter = 0;
+enum TypeKind {
+  TYPE_VAR,
+  CONCRETE_TYPE,
+  FUNCTION_TYPE,
+};
 struct Type {
 };
 struct TypeVar : public Type {
@@ -27,7 +33,19 @@ struct FunctionType : public Type {
 
 struct Scope {
   std::unordered_map<std::string, std::shared_ptr<Type>> symbols;
-  Scope* parent;
+  Scope *parent;
+
+  Type* resolve(const std::string& name) {
+    Scope *scope = this;
+    while (scope != nullptr) {
+      auto it = scope->symbols.find(name);
+      if (it != scope->symbols.end()) {
+        return it->second.get();
+      }
+      scope = scope->parent;
+    }
+    return nullptr;
+  }
 };
 
 class SymbolTableGenerator : public TmplangBaseListener {
@@ -37,6 +55,9 @@ class SymbolTableGenerator : public TmplangBaseListener {
 
   void enterFile(TmplangParser::FileContext *ctx) override {
     scopes.put(ctx, std::make_shared<Scope>());
+    scopes.get(ctx)->parent = nullptr;
+
+    // move downward
     currentScope = scopes.get(ctx).get();
   }
 
@@ -74,6 +95,17 @@ class SymbolTableGenerator : public TmplangBaseListener {
       }
     }
 
+    if (ctx->functionReturnTypeDecl() != nullptr) {
+      ConcreteType concreteType;
+      concreteType.name = ctx->functionReturnTypeDecl()->type()->getText();
+      functionType.to = std::make_shared<ConcreteType>(concreteType);
+    }
+    else {
+      TypeVar typeVar;
+      typeVar.id = typecounter++;
+      functionType.to = std::make_shared<TypeVar>(typeVar);
+    }
+
     // move upward
     currentScope = currentScope->parent;
     auto insertRet = currentScope->symbols.emplace(ctx->identifier()->getText(), std::make_shared<FunctionType>(functionType));
@@ -83,11 +115,45 @@ class SymbolTableGenerator : public TmplangBaseListener {
   }
 
   void enterBlockStatement(TmplangParser::BlockStatementContext *ctx) override {
-    
+    scopes.put(ctx, std::make_shared<Scope>());
+    scopes.get(ctx)->parent = currentScope;
+
+    // move downward
+    currentScope = scopes.get(ctx).get();
   }
 
   void exitBlockStatement(TmplangParser::BlockStatementContext *ctx) override {
+    // move upward
+    currentScope = currentScope->parent;
+  }
 
+  void enterIfStatement(TmplangParser::IfStatementContext *ctx) override {
+    scopes.put(ctx, std::make_shared<Scope>());
+    scopes.get(ctx)->parent = currentScope;
+
+    // move downward
+    currentScope = scopes.get(ctx).get();
+  }
+
+  void exitIfStatement(TmplangParser::IfStatementContext *ctx) override {
+    // move upward
+    currentScope = currentScope->parent;
+  }
+
+  void exitVarDeclStatement(TmplangParser::VarDeclStatementContext *ctx) override {
+    std::shared_ptr<Type> varType;
+    if (ctx->type() == nullptr) {
+      TypeVar typeVar;
+      typeVar.id = typecounter++;
+      varType = std::make_shared<TypeVar>(typeVar);
+    }
+    else {
+      ConcreteType concreteType;
+      concreteType.name = ctx->type()->getText();
+      varType = std::make_shared<ConcreteType>(concreteType);
+    }
+
+    currentScope->symbols.emplace(ctx->identifier()->getText(), varType);
   }
 };
 
