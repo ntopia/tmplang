@@ -64,25 +64,28 @@ bool FunctionType::equal(Type *rhs) {
   return true;
 }
 
-int typecounter = 0;
-auto *typeDump = new std::vector<std::unique_ptr<Type>>();
+static std::vector<std::unique_ptr<Type>>& getTypeDump() {
+  static std::vector<std::unique_ptr<Type>> typeDump;
+  return typeDump;
+}
 
 TypeVar* addTypeVar() {
+  static int typecounter = 0;
   TypeVar type;
   type.id = typecounter++;
-  typeDump->push_back(std::make_unique<TypeVar>(type));
-  return dynamic_cast<TypeVar*>(typeDump->back().get());
+  getTypeDump().push_back(std::make_unique<TypeVar>(type));
+  return dynamic_cast<TypeVar*>(getTypeDump().back().get());
 }
 
 ConcreteType* addConcreteType(const std::string& name) {
   ConcreteType type;
   type.name = name;
-  typeDump->push_back(std::make_unique<ConcreteType>(type));
-  return dynamic_cast<ConcreteType*>(typeDump->back().get());
+  getTypeDump().push_back(std::make_unique<ConcreteType>(type));
+  return dynamic_cast<ConcreteType*>(getTypeDump().back().get());
 }
 
 FunctionType* addFunctionType() {
   FunctionType type;
-  typeDump->push_back(std::make_unique<FunctionType>(type));
-  return dynamic_cast<FunctionType*>(typeDump->back().get());
+  getTypeDump().push_back(std::make_unique<FunctionType>(type));
+  return dynamic_cast<FunctionType*>(getTypeDump().back().get());
 }
