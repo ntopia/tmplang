@@ -19,9 +19,9 @@ using namespace antlr4;
 
 class TypeEquationGenerater : public TmplangBaseListener {
  public:
-  TypeEquationGenerater(tree::ParseTreeProperty<std::shared_ptr<Scope>>&& _scopes) : scopes(_scopes) {}
+  TypeEquationGenerater(tree::ParseTreeProperty<std::shared_ptr<Scope>>& _scopes) : scopes(_scopes) {}
 
-  tree::ParseTreeProperty<std::shared_ptr<Scope>> scopes;
+  tree::ParseTreeProperty<std::shared_ptr<Scope>>& scopes;
   Scope *currentScope;
   Type *currentFunctionType;
 
@@ -202,9 +202,9 @@ class TypeEquationGenerater : public TmplangBaseListener {
 
 class Checker : public TmplangBaseListener {
  public:
-  Checker(tree::ParseTreeProperty<std::shared_ptr<Scope>> _scopes, std::unordered_map<int, Type*> _subst) : scopes(_scopes), subst(_subst) {}
+  Checker(tree::ParseTreeProperty<std::shared_ptr<Scope>>& _scopes, std::unordered_map<int, Type*> _subst) : scopes(_scopes), subst(_subst) {}
 
-  tree::ParseTreeProperty<std::shared_ptr<Scope>> scopes;
+  tree::ParseTreeProperty<std::shared_ptr<Scope>>& scopes;
   Scope *currentScope;
   std::unordered_map<int, Type*> subst;
 
@@ -267,7 +267,9 @@ int main(int argc, const char *argv[]) {
   SymbolTableGenerator symgen;
   tree::ParseTreeWalker::DEFAULT.walk(&symgen, tree);
 
-  TypeEquationGenerater eqgen(std::move(symgen.scopes));
+  auto symbolTable = std::move(symgen.scopes);
+
+  TypeEquationGenerater eqgen(symbolTable);
   tree::ParseTreeWalker::DEFAULT.walk(&eqgen, tree);
 
   for (auto& eq : eqgen.equations) {
@@ -294,7 +296,7 @@ int main(int argc, const char *argv[]) {
 
   std::cout << "---------------------------\n";
   std::cout << "Type inference result\n";
-  Checker checker(std::move(eqgen.scopes), subst.value());
+  Checker checker(symbolTable, subst.value());
   tree::ParseTreeWalker::DEFAULT.walk(&checker, tree);
   return 0;
 }
