@@ -1,3 +1,6 @@
+#ifndef TYPE_H_
+#define TYPE_H_
+
 #include <vector>
 #include <string>
 
@@ -36,3 +39,5 @@ struct FunctionType : public Type {
 TypeVar* addTypeVar();
 ConcreteType* addConcreteType(const std::string& name);
 FunctionType* addFunctionType();
+
+#endif
