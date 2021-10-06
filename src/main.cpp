@@ -4,11 +4,13 @@
 #include <utility>
 #include <random>
 #include <unordered_map>
+#include <sstream>
 
 #include "antlr4-runtime.h"
 #include "TmplangLexer.h"
 #include "TmplangParser.h"
 #include "TmplangBaseListener.h"
+#include "TmplangBaseVisitor.h"
 
 #include "Type.h"
 #include "SymbolTable.h"
@@ -256,6 +258,94 @@ class Checker : public TmplangBaseListener {
 };
 
 
+class Transpiler : public TmplangBaseVisitor {
+ public:
+  std::ostringstream oss;
+
+  Transpiler(tree::ParseTreeProperty<std::shared_ptr<Scope>>& _scopes, std::unordered_map<int, Type*> _subst) : scopes(_scopes), subst(_subst) {}
+
+  tree::ParseTreeProperty<std::shared_ptr<Scope>>& scopes;
+  Scope *currentScope;
+  Type *currentFunctionType;
+  std::unordered_map<int, Type*> subst;
+
+
+  antlrcpp::Any visitFile(TmplangParser::FileContext *ctx) override {
+    currentScope = scopes.get(ctx).get();
+
+    for (auto *func : ctx->function()) {
+      visit(func);
+    }
+    return antlrcpp::Any();
+  }
+
+  antlrcpp::Any visitFunction(TmplangParser::FunctionContext *ctx) override {
+    currentFunctionType = applyUnifier(currentScope->findSymbol(ctx->identifier()->getText()), subst);
+    currentScope = scopes.get(ctx).get();
+
+    Type *returnType = applyUnifier(dynamic_cast<FunctionType*>(currentFunctionType)->to, subst);
+
+    oss << dynamic_cast<ConcreteType*>(returnType)->name << " " << ctx->identifier()->getText() << "(";
+
+    if (ctx->functionParams() != nullptr) {
+      visit(ctx->functionParams());
+    }
+
+    oss << ")";
+
+    visit(ctx->blockStatement());
+    oss << "\n";
+
+    currentScope = currentScope->parent;
+    return antlrcpp::Any();
+  }
+
+  antlrcpp::Any visitFunctionParams(TmplangParser::FunctionParamsContext *ctx) override {
+    for (auto i = 0; i < ctx->functionParamDecl().size(); i++) {
+      // we don't need to infer function param type, because it always needs to be concrete.
+      Type *paramType = currentScope->findSymbol(ctx->functionParamDecl()[i]->identifier()->getText());
+      oss << dynamic_cast<ConcreteType*>(paramType)->name << " " << ctx->functionParamDecl()[i]->identifier()->getText();
+      if (i + 1 < ctx->functionParamDecl().size()) {
+        oss << ", ";
+      }
+    }
+    return antlrcpp::Any();
+  }
+
+  antlrcpp::Any visitBlockStatement(TmplangParser::BlockStatementContext *ctx) override {
+    currentScope = scopes.get(ctx).get();
+
+    oss << " {\n";
+    visitChildren(ctx);
+    oss << "\n}\n";
+
+    currentScope = currentScope->parent;
+    return antlrcpp::Any();
+  }
+
+  antlrcpp::Any visitIfStatement(TmplangParser::IfStatementContext *ctx) override {
+    currentScope = scopes.get(ctx).get();
+
+    oss << "if (";
+    visit(ctx->expr());
+    oss << ")";
+
+    visit(ctx->blockStatement()[0]);
+
+    if (ctx->blockStatement().size() > 1) {
+      oss << "else ";
+      visit(ctx->blockStatement()[1]);
+    }
+    else if (ctx->ifStatement() != nullptr) {
+      visit(ctx->ifStatement());
+    }
+
+    currentScope = currentScope->parent;
+    return antlrcpp::Any();
+  }
+};
+
+
 int main(int argc, const char *argv[]) {
   ANTLRInputStream input(std::cin);
   TmplangLexer lexer(&input);
@@ -298,5 +388,12 @@ int main(int argc, const char *argv[]) {
   std::cout << "Type inference result\n";
   Checker checker(symbolTable, subst.value());
   tree::ParseTreeWalker::DEFAULT.walk(&checker, tree);
+
+  std::cout << "\n";
+  std::cout << "transpiled result: \n\n";
+  Transpiler transpiler(symbolTable, subst.value());
+  transpiler.visit(tree);
+
+  std::cout << transpiler.oss.str();
   return 0;
 }
