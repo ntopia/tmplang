@@ -1,7 +1,9 @@
 #ifndef TRANSPILER_H_
 #define TRANSPILER_H_
 
+#include <vector>
 #include <unordered_map>
+#include <utility>
 #include <memory>
 #include <sstream>
 
@@ -39,6 +41,16 @@ class Transpiler : public TmplangBaseVisitor {
   antlrcpp::Any visitIfStatement(TmplangParser::IfStatementContext *ctx) override;
 
   antlrcpp::Any visitVarDeclStatement(TmplangParser::VarDeclStatementContext *ctx) override;
+
+  antlrcpp::Any visitAssignStatement(TmplangParser::AssignStatementContext *ctx) override;
+
+  antlrcpp::Any visitReturnStatement(TmplangParser::ReturnStatementContext *ctx) override;
+
+  antlrcpp::Any visitNormalStatement(TmplangParser::NormalStatementContext *ctx) override;
+
+ private:
+  std::vector<std::pair<std::string, Type*>> emitAllVarDecls(Scope *root);
+
 };
 
 #endif

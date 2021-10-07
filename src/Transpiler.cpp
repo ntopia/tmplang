@@ -1,6 +1,7 @@
 #include "Transpiler.h"
 
 #include <string>
+#include <queue>
 
 #include "HMTypeInference.h"
 #include "Type.h"
@@ -52,12 +53,45 @@ antlrcpp::Any Transpiler::visitFunctionParams(TmplangParser::FunctionParamsConte
   return antlrcpp::Any();
 }
 
+std::vector<std::pair<std::string, Type*>> Transpiler::emitAllVarDecls(Scope *root) {
+  std::vector<std::pair<std::string, Type*>> results;
+
+  std::queue<Scope*> q;
+  q.push(root);
+  while (!q.empty()) {
+    Scope *scope = q.front();
+    q.pop();
+
+    for (auto& kv : scope->symbols) {
+      results.emplace_back(kv.first + "_" + scope->id, kv.second);
+    }
+
+    for (auto& kv : scope->children) {
+      q.push(kv.second);
+    }
+  }
+
+  return results;
+}
+
 antlrcpp::Any Transpiler::visitBlockStatement(TmplangParser::BlockStatementContext *ctx) {
   currentScope = scopes.get(ctx).get();
 
   oss << std::string(indentLevel * 2, ' ') << "{\n";
   indentLevel++;
+
+  // when a block is function-starting block, prints all variable declarations first.
+  if (dynamic_cast<TmplangParser::FunctionContext*>(ctx->parent) != nullptr) {
+    auto decls = emitAllVarDecls(currentScope);
+    for (auto& decl : decls) {
+      Type* varType = applyUnifier(decl.second, subst);
+      oss << std::string(indentLevel * 2, ' ') << dynamic_cast<ConcreteType*>(varType)->name << " " << decl.first << ";\n";
+    }
+  }
+  oss << "\n";
+
   visitChildren(ctx);
+
   indentLevel--;
   oss << std::string(indentLevel * 2, ' ') << "}\n";
 
@@ -87,11 +121,42 @@ antlrcpp::Any Transpiler::visitIfStatement(TmplangParser::IfStatementContext *ct
 }
 
 antlrcpp::Any Transpiler::visitVarDeclStatement(TmplangParser::VarDeclStatementContext *ctx) {
-  Type *varType = applyUnifier(currentScope->findSymbol(ctx->identifier()->getText()), subst);
+  if (ctx->expr() == nullptr) {
+    // TODO: needs to print a default value
+    return antlrcpp::Any();
+  }
 
-  oss << std::string(indentLevel * 2, ' ') << dynamic_cast<ConcreteType*>(varType)->name << " " << ctx->identifier()->getText() + "_" + currentScope->id << ";\n";
+  oss << std::string(indentLevel * 2, ' ') << ctx->identifier()->getText() << " = ";
 
-  visitChildren(ctx);
+  visit(ctx->expr());
 
+  oss << ";\n";
+  return antlrcpp::Any();
+}
+
+antlrcpp::Any Transpiler::visitAssignStatement(TmplangParser::AssignStatementContext *ctx) {
+  oss << std::string(indentLevel * 2, ' ') << ctx->identifier()->getText() << " = ";
+
+  visit(ctx->expr());
+
+  oss << ";\n";
+  return antlrcpp::Any();
+}
+
+antlrcpp::Any Transpiler::visitReturnStatement(TmplangParser::ReturnStatementContext *ctx) {
+  oss << std::string(indentLevel * 2, ' ') << "return ";
+
+  visit(ctx->expr());
+
+  oss << ";\n";
+  return antlrcpp::Any();
+}
+
+antlrcpp::Any Transpiler::visitNormalStatement(TmplangParser::NormalStatementContext *ctx) {
+  oss << std::string(indentLevel * 2, ' ');
+
+  visit(ctx->expr());
+
+  oss << ";\n";
   return antlrcpp::Any();
 }
