@@ -19,6 +19,11 @@ fn some_function1(int a, int b): int {
         let x = 1123;
         let bb = (c + x);
     }
+    else {
+        let y = d - c;
+        let char z = 'g';
+        let x = y + y - y;
+    }
 
     let super = some_function2(c, d);
 

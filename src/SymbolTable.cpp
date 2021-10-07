@@ -15,7 +15,7 @@ using namespace antlr4;
 
 
 std::string getRandomString(int len) {
-  static std::string randomchar = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz-_=+";
+  static std::string randomchar = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
   std::random_device rd;
   std::mt19937 gen(rd());
   std::uniform_int_distribution<> dist(0, randomchar.length() - 1);

@@ -81,7 +81,7 @@ DecimalLiteral: NONZERODIGIT (DIGIT)* ;
 HexadecimalLiteral: '0x' (HEXADECIMALDIGIT)+ ;
 
 CharacterLiteral
-    : '\'' [^'\\\r\n] '\'' ;
+    : '\'' ~['\\\r\n] '\'' ;
 
 BoolLiteral: ('true' | 'false');
 
